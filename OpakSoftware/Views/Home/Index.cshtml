@@ -1,0 +1,255 @@
+﻿@model OpakSoftware.Models.UploadedDataViewModel
+
+@{
+    ViewData["Title"] = "OpakSoftware Excel Operations - Test";
+}
+
+@if (Model?.Rows?.Count > 0)
+{
+    <h6 class="display-4">Export Data</h6>
+
+    <button type="button" id="exportToExcelButton" class="btn btn-success">Export to Excel</button>
+
+    <div class="text-right">
+        <button type="button" id="addNewRowButton" class="btn btn-primary">Add New Row</button>
+    </div>
+
+    <table class="table">
+        <thead>
+            <tr>
+                @foreach (var columnName in Model.ColumnNames)
+                {
+                    <th>@columnName</th>
+                }
+                <th>Actions</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            @foreach (var row in Model.Rows.Select((value, index) => new { value, index }))
+            {
+                <tr>
+                    @for (int i = 0; i < Model.ColumnNames.Count; i++)
+                    {
+                        var columnName = Model.ColumnNames[i];
+                        var cellValue = row.value[i];
+
+                        <td>
+                            <span class="view-mode">@cellValue</span>
+                            <input type="text" class="edit-mode form-control" name="@columnName" value="@cellValue" style="display:none;" />
+                        </td>
+                    }
+                    <td>
+                        <button type="button" class="btn btn-info btn-sm edit-button" data-index="@row.index">Edit</button>
+                        <button type="button" class="btn btn-danger btn-sm delete-button" data-id="@row.value[0]">Delete</button>
+
+                        <!-- Grid Edit Modal -->
+                        <div class="modal fade" id="editModal_@row.index" tabindex="-1" role="dialog" aria-labelledby="editModalLabel" aria-hidden="true">
+                            <div class="modal-dialog" role="document">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="editModalLabel">Edit Row</h5>
+                                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                            <span aria-hidden="true">&times;</span>
+                                        </button>
+                                    </div>
+                                    <form asp-action="UpdateRow" method="post">
+                                        <input type="hidden" name="keyColumnName" value="@Model.ColumnNames[0]" />
+                                        <input type="hidden" name="keyValue" value="@row.value[0]" />
+                                        <input type="hidden" name="columnNames" value="@string.Join(",", Model.ColumnNames)" />
+                                        <div class="modal-body">
+                                            @for (int i = 0; i < Model.ColumnNames.Count; i++)
+                                            {
+                                                var columnName = Model.ColumnNames[i];
+                                                var cellValue = row.value[i];
+
+                                                <div class="form-group">
+                                                    <label for="@columnName">@columnName</label>
+                                                    <input type="text" class="form-control" name="@columnName" value="@cellValue" />
+                                                </div>
+                                            }
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                                            <button type="submit" class="btn btn-primary">Save changes</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <!-- Add Row Modal -->
+    <div class="modal fade" id="addModal" tabindex="-1" role="dialog" aria-labelledby="addModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addModalLabel">Add New Row</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+
+                <form id="addRowModalForm" method="post">
+                    <div class="modal-body">
+                        @for (int i = 0; i < Model.ColumnNames.Count; i++)
+                        {
+                            if (Model.ColumnNames[i] != "Id")
+                            {
+                                <div class="form-group">
+                                    <label for="values_@i">@Model.ColumnNames[i]</label>
+                                    <input type="text" class="form-control" name="values" id="values_@i" />
+                                </div>
+                            }
+                        }
+                        <input type="hidden" name="columnNames" value="@string.Join(",", Model.ColumnNames)" />
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-primary">Add</button>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+    </div>
+
+
+    <style>
+        #addNewRowButton {
+            float: right;
+        }
+    </style>
+
+    @section Scripts {
+    <script>
+        $(document).ready(function () {
+            // Ajax operations
+            // Export button
+            $('#exportToExcelButton').click(function () {
+                $.ajax({
+                    url: '@Url.Action("ExportToExcel")',
+                    type: 'POST',
+                    xhrFields: {
+                        responseType: 'blob'
+                    },
+                    success: function (data) {
+                        var a = document.createElement('a');
+                        var url = window.URL.createObjectURL(data);
+                        a.href = url;
+                        a.download = 'ExportedData.xlsx';
+                        document.body.append(a);
+                        a.click();
+                        a.remove();
+                        window.URL.revokeObjectURL(url);
+
+                        if (confirm("Export işlemi tamamlandı. Tablo içeriğini silmek istiyor musunuz?")) {
+                            $.ajax({
+                                url: '@Url.Action("TruncateTable")',
+                                type: 'POST',
+                                success: function () {
+                                    alert('Tablo içeriği başarıyla silindi.');
+                                    location.reload();
+                                },
+                                error: function (xhr, status, error) {
+                                    console.error(error);
+                                    alert('Tablo içeriği silinirken bir hata oluştu.');
+                                }
+                            });
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        console.error(error);
+                        alert('Verileri Excel\'e aktarırken bir hata oluştu.');
+                    }
+                });
+            });
+
+            // Add row button
+            $('#addNewRowButton').click(function () {
+                $('#addModal').modal('show');
+            });
+
+            // Add row modal form submit event
+            $('#addRowModalForm').submit(function (e) {
+                e.preventDefault();
+                var formData = $(this).serializeArray();
+                $.ajax({
+                    url: '@Url.Action("AddRow")',
+                    type: 'POST',
+                    data: formData,
+                    success: function (response) {
+                        $('#addModal').modal('hide');
+                        location.reload();
+                    },
+                    error: function (xhr, status, error) {
+                        console.error(error);
+                        alert('Satır eklenirken bir hata oluştu.');
+                    }
+                });
+            });
+
+            // Edit and Delete button events
+            $('.edit-button').click(function () {
+                var index = $(this).data('index');
+                $('#editModal_' + index).modal('show');
+            });
+
+            $('.delete-button').click(function () {
+                if (confirm("Bu satırı silmek istediğinizden emin misiniz?")) {
+                    var keyValue = $(this).data('id');
+                    $.post('@Url.Action("DeleteRow")', { keyColumnName: "@Model.ColumnNames[0]", keyValue: keyValue }, function (data) {
+                        location.reload();
+                    });
+                }
+            });
+
+            // Document ready
+            document.querySelectorAll('.edit-button').forEach(button => {
+                button.addEventListener('click', function () {
+                    var index = button.getAttribute('data-index');
+                    var row = button.closest('tr');
+                    row.querySelectorAll('.view-mode').forEach(e => e.style.display = 'none');
+                    row.querySelectorAll('.edit-mode').forEach(e => e.style.display = 'block');
+                });
+            });
+
+            document.querySelectorAll('.delete-button').forEach(button => {
+                button.addEventListener('click', function () {
+                    if (confirm('Bu satırı silmek istediğinize emin misiniz?')) {
+                        var keyValue = button.getAttribute('data-id');
+                        $.post('@Url.Action("DeleteRow")', { keyColumnName: '@Model.ColumnNames[0]', keyValue: keyValue }, function (data) {
+                            location.reload();
+                        });
+                    }
+                });
+            });
+        });
+    </script>
+    }
+}
+else
+{
+    <!-- Excel Upload -->
+    <div class="row">
+        <div class="col-md-12">
+            <label for="file" style="color: red;">Since the table has not been created before, please upload the Excel table you want to create!</label>
+
+            <br><br>
+
+            <h5>Upload an Excel File</h5>
+            <form asp-controller="Home" asp-action="Upload" enctype="multipart/form-data" method="post">
+                <div class="form-group">
+                    <label for="file">Choose an Excel file</label>
+                    <input type="file" class="form-control-file" id="file" name="file" />
+                </div>
+                <button type="submit" class="btn btn-primary">Upload</button>
+            </form>
+        </div>
+    </div>
+}
